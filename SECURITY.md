@@ -23,7 +23,7 @@ We follow Chrome's security best practices:
 We take the security of ClipCompress seriously. If you discover a security vulnerability, please follow these steps:
 
 1. **Do Not** disclose the vulnerability publicly
-2. Send details of the vulnerability to [your-email@example.com]
+2. Send details of the vulnerability to [cneskey@duck.com]
 3. Include the following in your report:
    - Description of the vulnerability
    - Steps to reproduce
