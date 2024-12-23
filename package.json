@@ -1,11 +1,5 @@
 {
   "name": "clipcompress",
   "version": "1.0.0",
-  "description": "Chrome extension for compressing clipboard images",
-  "scripts": {
-    "generate-icons": "node generate-icons.js"
-  },
-  "dependencies": {
-    "sharp": "0.32.6"
-  }
+  "description": "Chrome extension for compressing clipboard images"
 }
