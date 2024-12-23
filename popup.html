@@ -42,29 +42,6 @@
       font-weight: 500;
     }
 
-    select, input[type="number"] {
-      width: 100%;
-      padding: 8px 12px;
-      margin-bottom: 16px;
-      border: none;
-      border-radius: 4px;
-      background-color: var(--input-bg);
-      color: var(--text-color);
-      font-size: 14px;
-      appearance: none;
-    }
-
-    select {
-      background-image: url('data:image/svg+xml;charset=US-ASCII,<svg width="14" height="8" viewBox="0 0 14 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L7 7L13 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-      padding-right: 36px;
-    }
-
-    select:hover, input[type="number"]:hover {
-      background-color: var(--hover-color);
-    }
-
     .range-container {
       margin-bottom: 16px;
     }
@@ -103,27 +80,27 @@
       cursor: pointer;
     }
 
-    .file-size-container {
+    .file-size-shortcuts {
       display: flex;
       gap: 8px;
+      margin-top: -8px;
       margin-bottom: 16px;
     }
 
-    .file-size-container input {
+    .file-size-shortcuts button {
       flex: 1;
-      margin-bottom: 0;
-    }
-
-    .file-size-container select {
-      width: auto;
-      margin-bottom: 0;
-    }
-
-    .hint {
+      padding: 8px;
+      border: none;
+      border-radius: 4px;
+      background: var(--input-bg);
+      color: var(--text-color);
+      cursor: pointer;
       font-size: 12px;
-      opacity: 0.7;
-      margin-top: -12px;
-      margin-bottom: 16px;
+      transition: background-color 0.2s;
+    }
+
+    .file-size-shortcuts button:hover {
+      background: var(--hover-color);
     }
 
     @media (prefers-color-scheme: light) {
@@ -134,10 +111,6 @@
         --border-color: #e0e0e0;
         --hover-color: #e5e5e5;
       }
-
-      select {
-        background-image: url('data:image/svg+xml;charset=US-ASCII,<svg width="14" height="8" viewBox="0 0 14 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L7 7L13 1" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>');
-      }
     }
   </style>
 </head>
@@ -146,12 +119,6 @@
     ClipCompress
     <span class="version">v1.0.0</span>
   </h1>
-
-  <label for="format">Image Format</label>
-  <select id="format">
-    <option value="jpeg">JPEG (Smaller size)</option>
-    <option value="png">PNG (Better quality)</option>
-  </select>
 
   <div class="range-container">
     <label for="quality">
@@ -164,19 +131,25 @@
   <div class="range-container">
     <label for="maxWidth">
       Maximum Width
-      <span class="range-value">400px</span>
+      <span class="range-value">4000px</span>
     </label>
-    <input type="range" id="maxWidth" min="100" max="4000" value="400">
+    <input type="range" id="maxWidth" min="100" max="8000" value="4000">
   </div>
 
-  <label for="maxFileSize">Maximum File Size</label>
-  <div class="file-size-container">
-    <input type="number" id="maxFileSize" min="0.1" max="10" step="0.1" value="1.0">
-    <select id="maxFileSizeUnit">
-      <option value="MB">MB</option>
-    </select>
+  <div class="range-container">
+    <label for="maxFileSize">
+      Maximum File Size
+      <span class="range-value">1.0 MB</span>
+    </label>
+    <input type="range" id="maxFileSize" min="0.1" max="50" step="0.1" value="1.0">
   </div>
-  <div class="hint">Minimum: 0.1 MB, Maximum: 10 MB</div>
+
+  <div class="file-size-shortcuts">
+    <button data-size="1">1 MB</button>
+    <button data-size="5">5 MB</button>
+    <button data-size="10">10 MB</button>
+    <button data-size="20">20 MB</button>
+  </div>
 
   <script src="popup.js"></script>
 </body>

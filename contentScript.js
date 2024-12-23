@@ -31,27 +31,85 @@ async function sendRuntimeMessage(message) {
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Received message:', message);
+
   if (!isExtensionContextValid()) {
+    console.warn('Extension context invalid');
     return false;
   }
 
   if (message.type === 'ping') {
+    console.log('Responding to ping');
     sendResponse({ status: 'ok' });
     return false;
   }
 
   if (message.type === 'fetchAndCompress') {
+    console.log('Processing fetchAndCompress request:', message);
+
+    // Validate required parameters
+    if (!message.imageUrl) {
+      const error = 'No image URL provided';
+      console.error('Missing imageUrl in message:', message);
+      showNotification(`Failed to process image: ${error}`, 'error');
+      sendResponse({
+        success: false,
+        error: error,
+        details: { message: 'imageUrl is required' }
+      });
+      return true;
+    }
+
+    if (!message.settings) {
+      const error = 'Missing compression settings';
+      console.error('Missing settings in message:', message);
+      showNotification(`Failed to process image: ${error}`, 'error');
+      sendResponse({
+        success: false,
+        error: error,
+        details: { message: 'settings are required' }
+      });
+      return true;
+    }
+
     handleFetchAndCompress(message)
-      .then(() => {
+      .then((result) => {
+        console.log('Compression successful:', result);
         if (isExtensionContextValid()) {
-          sendResponse({ success: true });
+          sendResponse({ success: true, result });
         }
       })
       .catch(error => {
-        console.error('Failed to fetch and compress:', error);
-        showNotification('Failed to process image. Please try again.', 'error');
+        // Improve error logging
+        const errorDetails = {
+          message: error.message || 'Unknown error',
+          name: error.name,
+          stack: error.stack,
+          toString: error.toString(),
+          url: message.imageUrl // Include the URL that failed
+        };
+
+        // Create a user-friendly error message
+        let userMessage = 'Failed to process image: ';
+        if (error.message?.includes('Failed to fetch')) {
+          userMessage += 'Could not download the image. Please check your internet connection.';
+        } else if (error.message?.includes('HTTP error')) {
+          userMessage += 'The image server returned an error. Please try again later.';
+        } else if (error.message?.includes('not an image')) {
+          userMessage += 'The URL does not point to a valid image file.';
+        } else {
+          userMessage += (error.message || 'Unknown error occurred');
+        }
+
+        console.error('Compression failed:', errorDetails);
+        showNotification(userMessage, 'error');
+
         if (isExtensionContextValid()) {
-          sendResponse({ success: false, error: error.message });
+          sendResponse({
+            success: false,
+            error: userMessage,
+            details: errorDetails
+          });
         }
       });
     return true;
@@ -87,67 +145,77 @@ async function writeToClipboard(blob) {
     throw new Error('Extension context invalidated');
   }
 
+  // Show warning for large images
+  if (blob.size > 10 * 1024 * 1024) { // 10MB
+    console.log('Large image detected:', formatFileSize(blob.size));
+    showNotification('Processing large image, this may take a moment...', 'info');
+  }
+
   try {
-    // Try modern Clipboard API first
-    const clipboardItem = new ClipboardItem({
-      [blob.type]: blob
-    });
-    await navigator.clipboard.write([clipboardItem]);
-    return true;
+    // Try to focus the document first
+    if (document.hasFocus()) {
+      // Try modern Clipboard API first if document is focused
+      const clipboardItem = new ClipboardItem({
+        'image/png': blob
+      });
+      await navigator.clipboard.write([clipboardItem]);
+      return true;
+    } else {
+      throw new Error('Document not focused');
+    }
   } catch (error) {
-    console.warn('Modern clipboard API failed, trying fallback:', error);
+    console.warn('Modern clipboard API failed:', error.message);
+
+    // Create a temporary canvas for the fallback method
+    const canvas = document.createElement('canvas');
+    const img = await createImageBitmap(blob);
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
 
     try {
-      // Fallback to execCommand
-      const img = document.createElement('img');
-      const url = URL.createObjectURL(blob);
-      img.src = url;
-      document.body.appendChild(img);
+      // Create a contenteditable div to handle the copy
+      const div = document.createElement('div');
+      div.contentEditable = 'true';
+      div.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        opacity: 0;
+        pointer-events: none;
+      `;
+      document.body.appendChild(div);
 
+      // Add the image as a data URL to the div
+      const dataUrl = canvas.toDataURL('image/png');
+      const tempImg = document.createElement('img');
+      tempImg.src = dataUrl;
+      div.appendChild(tempImg);
+
+      // Focus and select the div
+      div.focus();
       const range = document.createRange();
-      range.selectNode(img);
-      window.getSelection().removeAllRanges();
-      window.getSelection().addRange(range);
+      range.selectNode(div);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
 
+      // Execute copy command
       const success = document.execCommand('copy');
-      window.getSelection().removeAllRanges();
-      document.body.removeChild(img);
-      URL.revokeObjectURL(url);
 
-      if (!success) throw new Error('execCommand copy failed');
+      // Cleanup
+      document.body.removeChild(div);
+
+      if (!success) {
+        throw new Error('execCommand copy failed');
+      }
+
       return true;
     } catch (fallbackError) {
-      console.error('Clipboard fallback failed:', fallbackError);
-      throw new Error('Failed to copy to clipboard: ' + error.message);
+      console.error('All clipboard methods failed:', fallbackError);
+      throw new Error('Could not copy image to clipboard. Please try again.');
     }
-  }
-}
-
-// Handle clipboard write operation
-async function handleClipboardWrite(message) {
-  if (!isExtensionContextValid()) {
-    throw new Error('Extension context invalidated');
-  }
-
-  try {
-    // Convert to PNG for better clipboard compatibility
-    const pngBlob = await convertToPNG(message.imageData);
-
-    // Try to write to clipboard
-    await writeToClipboard(pngBlob);
-
-    // Calculate compression ratio
-    const ratio = ((message.originalSize - message.compressedSize) / message.originalSize * 100).toFixed(1);
-
-    // Show success notification with size info
-    showNotification(
-      `Image compressed and copied! (${formatFileSize(message.originalSize)} → ${formatFileSize(message.compressedSize)}, ${ratio}% smaller)`,
-      'success'
-    );
-  } catch (error) {
-    console.error('Failed to write to clipboard:', error);
-    showNotification('Failed to copy to clipboard. Please try again.', 'error');
-    throw error;
   }
 }
 
@@ -183,61 +251,301 @@ function showNotification(message, type = 'info') {
   }
 }
 
-// Helper function to convert blob to base64
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+// Handle fetch and compress operation
+async function handleFetchAndCompress(message) {
+  try {
+    if (!message.settings) {
+      console.error('Missing settings in message:', message);
+      throw new Error('Missing compression settings');
+    }
+
+    if (!message.imageUrl) {
+      console.error('Missing imageUrl in message:', message);
+      throw new Error('Missing image URL');
+    }
+
+    let imageData = null;
+    let processedUrl = message.imageUrl;
+
+    // Special handling for Wikimedia URLs
+    if (processedUrl.includes('wikimedia.org') || processedUrl.includes('wikipedia.org')) {
+      console.log('Detected Wikimedia URL:', processedUrl);
+      processedUrl = processedUrl.replace(/\/thumb\//, '/');
+      processedUrl = processedUrl.replace(/\/\d+px-[^\/]+$/, '');
+      console.log('Processed Wikimedia URL:', processedUrl);
+    }
+
+    // Log initial request details
+    console.log('Processing request:', {
+      originalUrl: message.imageUrl,
+      processedUrl: processedUrl,
+      settings: message.settings
+    });
+
+    // Try to fetch the image using fetch API with retry
+    let response = null;
+    let blob = null;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`Attempt ${retryCount + 1} to fetch image from URL:`, processedUrl);
+
+        // Show progress notification for large images
+        const controller = new AbortController();
+        const signal = controller.signal;
+
+        response = await fetch(processedUrl, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit',
+          signal,
+          headers: {
+            'Origin': window.location.origin,
+            'Accept': 'image/*',
+            'User-Agent': 'ClipCompress Extension'
+          }
+        });
+
+        // Check content length
+        const contentLength = response.headers.get('content-length');
+        if (contentLength && parseInt(contentLength) > 20 * 1024 * 1024) { // 20MB
+          showNotification('Downloading large image, this may take a moment...', 'info');
+        }
+
+        console.log('Response status:', response.status);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        blob = await response.blob();
+        console.log('Fetch response received:', {
+          type: blob.type,
+          size: blob.size
+        });
+
+        if (!blob.type.startsWith('image/')) {
+          throw new Error(`Response is not an image (type: ${blob.type})`);
+        }
+
+        break; // Success, exit retry loop
+      } catch (fetchError) {
+        console.error(`Fetch attempt ${retryCount + 1} failed:`, fetchError);
+        retryCount++;
+
+        if (retryCount === maxRetries) {
+          throw new Error(`Failed to fetch image after ${maxRetries} attempts: ${fetchError.message}`);
+        }
+
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
+
+    // Create an image from the blob
+    if (blob.size > 5 * 1024 * 1024) { // 5MB
+      showNotification('Creating image preview...', 'info');
+    }
+    const img = await createImageBitmap(blob);
+
+    // Calculate dimensions while maintaining aspect ratio
+    let targetWidth = img.width;
+    let targetHeight = img.height;
+    const minWidth = message.settings.minWidth;
+    const maxWidth = message.settings.maxWidth || 1920;
+
+    if (targetWidth > maxWidth) {
+      const ratio = maxWidth / targetWidth;
+      targetWidth = maxWidth;
+      targetHeight = Math.round(targetHeight * ratio);
+    }
+
+    if (targetWidth < minWidth) {
+      const ratio = minWidth / targetWidth;
+      targetWidth = minWidth;
+      targetHeight = Math.round(targetHeight * ratio);
+    }
+
+    // Create canvas and draw image
+    if (blob.size > 5 * 1024 * 1024) { // 5MB
+      showNotification('Preparing image for compression...', 'info');
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+    // Compress the image
+    if (blob.size > 5 * 1024 * 1024) { // 5MB
+      showNotification('Compressing image...', 'info');
+    }
+    const quality = message.settings.quality / 100;
+    const compressedBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) resolve(result);
+          else reject(new Error('Failed to create compressed blob'));
+        },
+        'image/png',
+        quality
+      );
+    });
+
+    if (!compressedBlob) {
+      throw new Error('Failed to create compressed image');
+    }
+
+    // Write to clipboard
+    await writeToClipboard(compressedBlob);
+
+    // Show success notification
+    const ratio = ((blob.size - compressedBlob.size) / blob.size * 100).toFixed(1);
+    showNotification(
+      `Image compressed and copied! (${formatFileSize(blob.size)} → ${formatFileSize(compressedBlob.size)}, ${ratio}% smaller)`,
+      'success'
+    );
+
+    return {
+      success: true,
+      originalSize: blob.size,
+      compressedSize: compressedBlob.size,
+      ratio: ratio
+    };
+
+  } catch (error) {
+    // Improve error logging
+    const errorDetails = {
+      message: error.message || 'Unknown error',
+      name: error.name,
+      stack: error.stack,
+      toString: error.toString(),
+      url: message.imageUrl // Include the URL that failed
+    };
+
+    // Create a more descriptive error message
+    let errorMessage = 'Failed to process image: ';
+    if (error.message?.includes('Failed to fetch')) {
+      errorMessage += 'Could not download the image. Please check your internet connection.';
+    } else if (error.message?.includes('HTTP error')) {
+      errorMessage += 'The image server returned an error. Please try again later.';
+    } else if (error.message?.includes('not an image')) {
+      errorMessage += 'The URL does not point to a valid image file.';
+    } else {
+      errorMessage += error.message;
+    }
+
+    console.error('Failed to fetch and compress:', errorDetails);
+    showNotification(errorMessage, 'error');
+    throw error;
+  }
 }
 
 // Handle clipboard operations
 document.addEventListener('paste', async (e) => {
+  console.log('Paste event detected');
+
   if (!isExtensionContextValid()) {
     console.warn('Extension context invalid during paste');
     return;
   }
 
-  // Only handle paste events in editable elements
-  if (!e.target.isContentEditable &&
-      e.target.tagName !== 'INPUT' &&
-      e.target.tagName !== 'TEXTAREA') {
-    return;
-  }
-
+  // Get clipboard items
   const items = e.clipboardData?.items;
   if (!items) {
     console.warn('No clipboard data available');
     return;
   }
 
+  // Look for image items
   for (const item of items) {
+    console.log('Processing clipboard item:', item.type);
+
     if (item.type.startsWith('image/')) {
-      e.preventDefault();
+      e.preventDefault(); // Prevent default paste
+
       try {
+        // Get the image as a blob
         const blob = item.getAsFile();
         if (!blob) {
           throw new Error('Failed to get image file from clipboard');
         }
 
-        const base64Data = await blobToBase64(blob);
-        if (!base64Data) {
-          throw new Error('Failed to convert image to base64');
-        }
-
-        const response = await sendRuntimeMessage({
-          type: 'compressClipboardImage',
-          imageData: base64Data
+        // Get current compression settings
+        const settings = await chrome.storage.sync.get({
+          format: 'jpeg',
+          quality: 100,
+          maxWidth: 400,
+          minWidth: 400,
+          maxFileSize: 1048576 // 1MB in bytes
         });
 
-        if (!response || response.error) {
-          throw new Error(response?.error || 'Failed to compress image');
+        console.log('Processing pasted image:', {
+          type: blob.type,
+          size: blob.size,
+          settings: settings
+        });
+
+        // Create an image from the blob
+        const img = await createImageBitmap(blob);
+
+        // Calculate dimensions while maintaining aspect ratio
+        let targetWidth = img.width;
+        let targetHeight = img.height;
+        const minWidth = settings.minWidth;
+        const maxWidth = settings.maxWidth;
+
+        if (targetWidth > maxWidth) {
+          const ratio = maxWidth / targetWidth;
+          targetWidth = maxWidth;
+          targetHeight = Math.round(targetHeight * ratio);
         }
 
+        if (targetWidth < minWidth) {
+          const ratio = minWidth / targetWidth;
+          targetWidth = minWidth;
+          targetHeight = Math.round(targetHeight * ratio);
+        }
+
+        // Create canvas and draw image
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        // Compress the image
+        const quality = settings.quality / 100;
+        const compressedBlob = await new Promise((resolve, reject) => {
+          canvas.toBlob(
+            (result) => {
+              if (result) resolve(result);
+              else reject(new Error('Failed to create compressed blob'));
+            },
+            'image/png',
+            quality
+          );
+        });
+
+        // Write to clipboard
+        await writeToClipboard(compressedBlob);
+
+        // Show success notification
+        const ratio = ((blob.size - compressedBlob.size) / blob.size * 100).toFixed(1);
+        showNotification(
+          `Image compressed and copied! (${formatFileSize(blob.size)} → ${formatFileSize(compressedBlob.size)}, ${ratio}% smaller)`,
+          'success'
+        );
+
       } catch (error) {
-        console.error('Failed to handle paste:', error.message || error);
+        console.error('Failed to handle paste:', error);
         showNotification(
           `Failed to process pasted image: ${error.message || 'Unknown error'}`,
           'error'
@@ -255,9 +563,11 @@ document.addEventListener('dragover', (e) => {
     return;
   }
 
+  // Check if any of the dragged items are images
   const hasImage = Array.from(e.dataTransfer.items).some(item =>
     item.type.startsWith('image/')
   );
+
   if (hasImage) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
@@ -265,42 +575,113 @@ document.addEventListener('dragover', (e) => {
 });
 
 document.addEventListener('drop', async (e) => {
+  console.log('Drop event detected');
+
   if (!isExtensionContextValid()) {
     console.warn('Extension context invalid during drop');
     return;
   }
 
+  // Get dropped items
   const items = e.dataTransfer?.items;
   if (!items) {
     console.warn('No drop data available');
     return;
   }
 
+  // Look for image items
   for (const item of items) {
+    console.log('Processing dropped item:', item.type);
+
     if (item.type.startsWith('image/')) {
       e.preventDefault();
+
       try {
+        // Get the image as a blob
         const blob = item.getAsFile();
         if (!blob) {
           throw new Error('Failed to get image file from drop');
         }
 
-        const base64Data = await blobToBase64(blob);
-        if (!base64Data) {
-          throw new Error('Failed to convert image to base64');
-        }
-
-        const response = await sendRuntimeMessage({
-          type: 'compressClipboardImage',
-          imageData: base64Data
+        // Get current compression settings
+        const settings = await chrome.storage.sync.get({
+          format: 'jpeg',
+          quality: 100,
+          maxWidth: 400,
+          minWidth: 400,
+          maxFileSize: 1048576 // 1MB in bytes
         });
 
-        if (!response || response.error) {
-          throw new Error(response?.error || 'Failed to compress image');
+        console.log('Processing dropped image:', {
+          type: blob.type,
+          size: blob.size,
+          settings: settings
+        });
+
+        // Create an image from the blob
+        if (blob.size > 5 * 1024 * 1024) { // 5MB
+          showNotification('Creating image preview...', 'info');
+        }
+        const img = await createImageBitmap(blob);
+
+        // Calculate dimensions while maintaining aspect ratio
+        let targetWidth = img.width;
+        let targetHeight = img.height;
+        const minWidth = settings.minWidth;
+        const maxWidth = settings.maxWidth || 1920;
+
+        if (targetWidth > maxWidth) {
+          const ratio = maxWidth / targetWidth;
+          targetWidth = maxWidth;
+          targetHeight = Math.round(targetHeight * ratio);
         }
 
+        if (targetWidth < minWidth) {
+          const ratio = minWidth / targetWidth;
+          targetWidth = minWidth;
+          targetHeight = Math.round(targetHeight * ratio);
+        }
+
+        // Create canvas and draw image
+        if (blob.size > 5 * 1024 * 1024) { // 5MB
+          showNotification('Preparing image for compression...', 'info');
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        // Compress the image
+        if (blob.size > 5 * 1024 * 1024) { // 5MB
+          showNotification('Compressing image...', 'info');
+        }
+        const quality = settings.quality / 100;
+        const compressedBlob = await new Promise((resolve, reject) => {
+          canvas.toBlob(
+            (result) => {
+              if (result) resolve(result);
+              else reject(new Error('Failed to create compressed blob'));
+            },
+            'image/png',
+            quality
+          );
+        });
+
+        // Write to clipboard
+        await writeToClipboard(compressedBlob);
+
+        // Show success notification
+        const ratio = ((blob.size - compressedBlob.size) / blob.size * 100).toFixed(1);
+        showNotification(
+          `Image compressed and copied! (${formatFileSize(blob.size)} → ${formatFileSize(compressedBlob.size)}, ${ratio}% smaller)`,
+          'success'
+        );
+
       } catch (error) {
-        console.error('Failed to handle drop:', error.message || error);
+        console.error('Failed to handle drop:', error);
         showNotification(
           `Failed to process dropped image: ${error.message || 'Unknown error'}`,
           'error'
@@ -310,50 +691,3 @@ document.addEventListener('drop', async (e) => {
     }
   }
 });
-
-// Handle fetch and compress operation
-async function handleFetchAndCompress(message) {
-  try {
-    // Get the image element from the page
-    const imgElement = document.querySelector(`img[src="${message.imageUrl}"]`);
-    if (!imgElement) {
-      throw new Error('Image element not found');
-    }
-
-    // Create a canvas to get the image data
-    const canvas = document.createElement('canvas');
-    canvas.width = imgElement.naturalWidth;
-    canvas.height = imgElement.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imgElement, 0, 0);
-
-    // Get the image data as blob
-    const blob = await new Promise(resolve => {
-      canvas.toBlob(resolve, `image/${message.settings.format}`, message.settings.quality / 100);
-    });
-
-    if (!blob) {
-      throw new Error('Failed to convert image to blob');
-    }
-
-    // Convert blob to base64
-    const base64data = await blobToBase64(blob);
-
-    // Write to clipboard
-    await writeToClipboard(blob);
-
-    // Calculate compression ratio
-    const originalSize = canvas.width * canvas.height * 4; // Rough estimate of original size
-    const ratio = ((originalSize - blob.size) / originalSize * 100).toFixed(1);
-
-    // Show success notification
-    showNotification(
-      `Image compressed and copied! (${formatFileSize(originalSize)} → ${formatFileSize(blob.size)}, ${ratio}% smaller)`,
-      'success'
-    );
-  } catch (error) {
-    console.error('Failed to fetch and compress:', error);
-    showNotification('Failed to process image. Please try again.', 'error');
-    throw error;
-  }
-}

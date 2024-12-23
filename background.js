@@ -8,9 +8,8 @@ chrome.runtime.onInstalled.addListener(() => {
 
   // Set default settings if not already set
   chrome.storage.sync.get({
-    format: 'jpeg',
     quality: 100,
-    maxWidth: 400,
+    maxWidth: 4000,
     minWidth: 400,
     maxFileSize: 1048576 // 1MB in bytes
   }, (items) => {
@@ -35,39 +34,70 @@ async function injectContentScript(tabId) {
     // First try to ping existing content script
     try {
       await chrome.tabs.sendMessage(tabId, { type: 'ping' });
+      console.log('Content script already present');
       return true; // Content script is already there and responding
     } catch (error) {
+      console.log('Content script not found, injecting...');
       // Content script not found or not responding, inject it
       await chrome.scripting.executeScript({
         target: { tabId, allFrames: true },
         files: ['contentScript.js']
       });
 
-      // Wait for content script to initialize (up to 1 second)
-      for (let i = 0; i < 10; i++) {
+      // Wait for content script to initialize (up to 3 seconds)
+      for (let i = 0; i < 30; i++) {
         try {
           await new Promise(resolve => setTimeout(resolve, 100));
           await chrome.tabs.sendMessage(tabId, { type: 'ping' });
+          console.log('Content script successfully injected and responding');
           return true; // Content script is now ready
         } catch (error) {
-          if (i === 9) throw error; // Last attempt failed
+          if (i === 29) {
+            console.error('Content script injection timeout after 3 seconds');
+            throw new Error('Content script failed to initialize after injection');
+          }
         }
       }
     }
   } catch (error) {
     console.error('Failed to inject content script:', error);
-    throw error; // Propagate the error
+    throw new Error(`Failed to inject content script: ${error.message}`);
   }
 }
 
-// Send message to tab with retry
+// Helper function to send messages to tabs
 async function sendMessageToTab(tabId, message) {
   try {
+    console.log('Sending message to tab:', { tabId, message });
+
     // Ensure content script is injected
     await injectContentScript(tabId);
 
-    // Send message and wait for response
-    return await chrome.tabs.sendMessage(tabId, message);
+    // Send the message and wait for response with a timeout
+    const response = await new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Message timeout: No response from content script after 10 seconds'));
+      }, 10000); // 10 second timeout
+
+      chrome.tabs.sendMessage(tabId, message, (result) => {
+        clearTimeout(timeoutId);
+        if (chrome.runtime.lastError) {
+          reject(new Error(`Chrome runtime error: ${chrome.runtime.lastError.message}`));
+        } else {
+          resolve(result);
+        }
+      });
+    });
+
+    console.log('Received response from tab:', response);
+
+    if (!response) {
+      throw new Error('Empty response from content script');
+    }
+    if (response.error) {
+      throw new Error(`Content script error: ${response.error}`);
+    }
+    return response;
   } catch (error) {
     console.error('Failed to send message to tab:', error);
     throw error;
@@ -144,21 +174,37 @@ async function compressImage(imageData, settings) {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'compressImage') {
     try {
+      console.log('Context menu clicked:', { info, tab });
+
+      // Validate required info
+      if (!info.srcUrl) {
+        throw new Error('No image URL provided');
+      }
+      if (!tab || !tab.id) {
+        throw new Error('Invalid tab context');
+      }
+
       // Get settings
       const settings = await chrome.storage.sync.get({
-        format: 'jpeg',
         quality: 100,
         maxWidth: 400,
         minWidth: 400,
         maxFileSize: 1048576 // 1MB in bytes
       });
 
+      console.log('Sending compression request:', {
+        url: info.srcUrl,
+        settings: settings
+      });
+
       // Send message to content script to fetch and process the image
-      await sendMessageToTab(tab.id, {
+      const response = await sendMessageToTab(tab.id, {
         type: 'fetchAndCompress',
         imageUrl: info.srcUrl,
         settings: settings
       });
+
+      console.log('Compression response:', response);
 
     } catch (error) {
       console.error('Compression failed:', error);
@@ -167,7 +213,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         type: 'basic',
         iconUrl: 'icons/icon48.png',
         title: 'ClipCompress Error',
-        message: `Failed to compress image: ${error.message}`
+        message: error.message || 'Failed to compress image'
       });
     }
   }
