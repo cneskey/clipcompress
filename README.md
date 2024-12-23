@@ -8,7 +8,6 @@ A Chrome extension that compresses images in your clipboard with customizable se
 - Outputs compressed images in PNG format
 - Smart compression algorithm that balances quality and file size
 - Right-click menu integration for web images
-- Drag and drop support for local images
 - Progress notifications with compression details
 
 ## Installation
@@ -26,12 +25,6 @@ A Chrome extension that compresses images in your clipboard with customizable se
 2. Select "Compress Image to Clipboard"
 3. The compressed image will be copied to your clipboard
 
-### Drag and Drop
-
-1. Drag any image file from your computer
-2. Drop it onto any webpage
-3. The compressed image will be copied to your clipboard
-
 ### Settings
 
 - **Quality**: Set compression quality (1-100%)
@@ -44,10 +37,6 @@ The extension uses a smart compression algorithm that:
 - Progressively adjusts quality and dimensions to meet size targets
 - Shows detailed progress notifications
 - Provides compression statistics after completion
-
-### Keyboard Shortcuts
-
-- Use `Ctrl+Shift+C` (Windows) or `Cmd+Shift+C` (Mac) to open the settings popup
 
 ## License
 

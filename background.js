@@ -218,10 +218,3 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
   }
 });
-
-// Handle keyboard shortcut
-chrome.commands.onCommand.addListener((command) => {
-  if (command === '_execute_action') {
-    chrome.action.openPopup();
-  }
-});
