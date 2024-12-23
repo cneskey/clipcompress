@@ -36,7 +36,7 @@ jobs:
           zip -r extension.zip dist/* manifest.json icons/*
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: chrome-extension
           path: extension.zip
