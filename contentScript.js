@@ -145,107 +145,168 @@ async function writeToClipboard(blob) {
     throw new Error('Extension context invalidated');
   }
 
-  // Show warning for large images
-  if (blob.size > 10 * 1024 * 1024) { // 10MB
-    console.log('Large image detected:', formatFileSize(blob.size));
-    showNotification('Processing large image, this may take a moment...', 'info');
+  console.log('Writing to clipboard:', {
+    type: blob.type,
+    size: formatFileSize(blob.size)
+  });
+
+  // Try modern clipboard API first
+  if (document.hasFocus()) {
+    try {
+      // Request clipboard permission
+      const permission = await navigator.permissions.query({ name: 'clipboard-write' });
+      if (permission.state === 'granted' || permission.state === 'prompt') {
+        // Create a ClipboardItem directly from the compressed blob
+        const clipboardItem = new ClipboardItem({
+          'image/png': blob
+        });
+        await navigator.clipboard.write([clipboardItem]);
+        console.log('Successfully wrote to clipboard using modern API');
+        return true;
+      } else {
+        throw new Error('Clipboard permission denied');
+      }
+    } catch (clipboardError) {
+      console.log('Modern clipboard API failed:', clipboardError);
+      // Fall through to fallback method
+    }
   }
 
+  // Fallback to execCommand
   try {
-    // Try to focus the document first
-    if (document.hasFocus()) {
-      // Try modern Clipboard API first if document is focused
-      const clipboardItem = new ClipboardItem({
-        'image/png': blob
-      });
-      await navigator.clipboard.write([clipboardItem]);
+    console.log('Trying fallback clipboard method');
+
+    // Create a contenteditable div to handle the copy
+    const div = document.createElement('div');
+    div.contentEditable = 'true';
+    div.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      opacity: 0;
+      pointer-events: none;
+    `;
+    document.body.appendChild(div);
+
+    // Create an image element from the blob
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(blob);
+    div.appendChild(img);
+
+    // Focus and select the div
+    div.focus();
+    const range = document.createRange();
+    range.selectNode(div);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    // Execute copy command
+    const success = document.execCommand('copy');
+    console.log('Fallback clipboard result:', success);
+
+    // Cleanup
+    URL.revokeObjectURL(img.src);
+    document.body.removeChild(div);
+
+    if (success) {
       return true;
-    } else {
-      throw new Error('Document not focused');
     }
+
+    throw new Error('Fallback clipboard method failed');
   } catch (error) {
-    console.warn('Modern clipboard API failed:', error.message);
-
-    // Create a temporary canvas for the fallback method
-    const canvas = document.createElement('canvas');
-    const img = await createImageBitmap(blob);
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-
-    try {
-      // Create a contenteditable div to handle the copy
-      const div = document.createElement('div');
-      div.contentEditable = 'true';
-      div.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        opacity: 0;
-        pointer-events: none;
-      `;
-      document.body.appendChild(div);
-
-      // Add the image as a data URL to the div
-      const dataUrl = canvas.toDataURL('image/png');
-      const tempImg = document.createElement('img');
-      tempImg.src = dataUrl;
-      div.appendChild(tempImg);
-
-      // Focus and select the div
-      div.focus();
-      const range = document.createRange();
-      range.selectNode(div);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-
-      // Execute copy command
-      const success = document.execCommand('copy');
-
-      // Cleanup
-      document.body.removeChild(div);
-
-      if (!success) {
-        throw new Error('execCommand copy failed');
-      }
-
-      return true;
-    } catch (fallbackError) {
-      console.error('All clipboard methods failed:', fallbackError);
-      throw new Error('Could not copy image to clipboard. Please try again.');
-    }
+    console.error('All clipboard methods failed:', error);
+    throw new Error(`Could not copy image to clipboard: ${error.message}`);
   }
 }
 
 // Helper function to show notifications
 function showNotification(message, type = 'info') {
   try {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      padding: 16px 24px;
-      border-radius: 4px;
-      color: white;
-      font-family: system-ui, sans-serif;
-      z-index: 9999;
-      transition: opacity 0.3s ease-in-out;
-      background-color: ${type === 'error' ? '#f44336' : '#4caf50'};
-    `;
-    notification.textContent = message;
-    document.body.appendChild(notification);
+    // Create or get the console container
+    let consoleContainer = document.querySelector('.clipcompress-console');
+    if (!consoleContainer) {
+      consoleContainer = document.createElement('div');
+      consoleContainer.className = 'clipcompress-console';
+      consoleContainer.style.cssText = `
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 350px;
+        max-height: 100vh;
+        padding: 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        line-height: 1.1;
+        z-index: 9999;
+        overflow-y: auto;
+        background: rgba(0, 12, 24, 0.75);
+        backdrop-filter: blur(8px);
+        border-left: 1px solid rgba(64, 232, 255, 0.3);
+        box-shadow: -2px 0 20px rgba(64, 232, 255, 0.1);
+        color: rgba(64, 232, 255, 0.9);
+        scrollbar-width: thin;
+        scrollbar-color: rgba(64, 232, 255, 0.3) transparent;
+        text-align: right;
+      `;
 
-    setTimeout(() => {
-      notification.style.opacity = '0';
-      setTimeout(() => {
-        if (document.body.contains(notification)) {
-          notification.remove();
+      // Add custom scrollbar styles
+      const style = document.createElement('style');
+      style.textContent = `
+        .clipcompress-console::-webkit-scrollbar {
+          width: 3px;
         }
-      }, 300);
-    }, 3000);
+        .clipcompress-console::-webkit-scrollbar-track {
+          background: rgba(0, 12, 24, 0.3);
+        }
+        .clipcompress-console::-webkit-scrollbar-thumb {
+          background: rgba(64, 232, 255, 0.3);
+        }
+      `;
+      document.head.appendChild(style);
+
+      document.body.appendChild(consoleContainer);
+    }
+
+    // Create message element
+    const messageElement = document.createElement('div');
+    messageElement.style.cssText = `
+      padding: 1px 4px;
+      color: ${type === 'error' ? '#ff4757' : type === 'success' ? '#7bed9f' : 'rgba(64, 232, 255, 0.9)'};
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
+
+    // Add message without timestamp
+    messageElement.textContent = message;
+
+    // Add to console
+    consoleContainer.appendChild(messageElement);
+
+    // Scroll to bottom
+    consoleContainer.scrollTop = consoleContainer.scrollHeight;
+
+    // Remove old messages if there are too many
+    while (consoleContainer.children.length > 50) {
+      consoleContainer.removeChild(consoleContainer.firstChild);
+    }
+
+    // Auto-remove the console after 10 seconds of inactivity
+    clearTimeout(consoleContainer.dataset.timeout);
+    consoleContainer.dataset.timeout = setTimeout(() => {
+      consoleContainer.style.opacity = '0';
+      setTimeout(() => {
+        if (document.body.contains(consoleContainer)) {
+          consoleContainer.remove();
+        }
+      }, 500);
+    }, 10000);
+
+    // Reset opacity if it was fading
+    consoleContainer.style.opacity = '1';
+    consoleContainer.style.transition = 'opacity 0.5s ease-in-out';
+
   } catch (error) {
     console.error('Failed to show notification:', error);
   }
@@ -292,30 +353,16 @@ async function handleFetchAndCompress(message) {
       try {
         console.log(`Attempt ${retryCount + 1} to fetch image from URL:`, processedUrl);
 
-        // Show progress notification for large images
-        const controller = new AbortController();
-        const signal = controller.signal;
-
         response = await fetch(processedUrl, {
           method: 'GET',
           mode: 'cors',
           credentials: 'omit',
-          signal,
           headers: {
             'Origin': window.location.origin,
             'Accept': 'image/*',
             'User-Agent': 'ClipCompress Extension'
           }
         });
-
-        // Check content length
-        const contentLength = response.headers.get('content-length');
-        if (contentLength && parseInt(contentLength) > 20 * 1024 * 1024) { // 20MB
-          showNotification('Downloading large image, this may take a moment...', 'info');
-        }
-
-        console.log('Response status:', response.status);
-        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -331,7 +378,7 @@ async function handleFetchAndCompress(message) {
           throw new Error(`Response is not an image (type: ${blob.type})`);
         }
 
-        break; // Success, exit retry loop
+        break;
       } catch (fetchError) {
         console.error(`Fetch attempt ${retryCount + 1} failed:`, fetchError);
         retryCount++;
@@ -340,16 +387,31 @@ async function handleFetchAndCompress(message) {
           throw new Error(`Failed to fetch image after ${maxRetries} attempts: ${fetchError.message}`);
         }
 
-        // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
       }
     }
 
-    // Create an image from the blob
-    if (blob.size > 5 * 1024 * 1024) { // 5MB
-      showNotification('Creating image preview...', 'info');
-    }
     const img = await createImageBitmap(blob);
+    const outputFormat = blob.type.includes('jpeg') || blob.type.includes('jpg') ? 'jpeg' : 'png';
+
+    // Function to compress with specific settings
+    async function compressWithSettings(width, height, quality) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, width, height);
+
+      return new Promise((resolve) => {
+        canvas.toBlob(
+          (result) => resolve(result),
+          'image/png',
+          quality
+        );
+      });
+    }
 
     // Calculate dimensions while maintaining aspect ratio
     let targetWidth = img.width;
@@ -369,10 +431,7 @@ async function handleFetchAndCompress(message) {
       targetHeight = Math.round(targetHeight * ratio);
     }
 
-    // Create canvas and draw image
-    if (blob.size > 5 * 1024 * 1024) { // 5MB
-      showNotification('Preparing image for compression...', 'info');
-    }
+    // Create canvas for compression
     const canvas = document.createElement('canvas');
     canvas.width = targetWidth;
     canvas.height = targetHeight;
@@ -381,54 +440,130 @@ async function handleFetchAndCompress(message) {
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
-    // Compress the image
-    if (blob.size > 5 * 1024 * 1024) { // 5MB
-      showNotification('Compressing image...', 'info');
-    }
-    const quality = message.settings.quality / 100;
-    const compressedBlob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (result) => {
-          if (result) resolve(result);
-          else reject(new Error('Failed to create compressed blob'));
-        },
-        'image/png',
-        quality
-      );
-    });
+    // Try compression with progressively more aggressive settings
+    let compressedBlob = null;
+    let quality = Math.min(0.9, message.settings.quality / 100);
+    let scaleFactor = 1;
+    let attempts = [];
 
-    if (!compressedBlob) {
-      throw new Error('Failed to create compressed image');
+    showNotification('Starting image compression...', 'info');
+
+    while (!compressedBlob || compressedBlob.size > message.settings.maxFileSize) {
+      const currentWidth = Math.max(Math.round(targetWidth * scaleFactor), minWidth);
+      const currentHeight = Math.round(targetHeight * (currentWidth / targetWidth));
+
+      // Update canvas dimensions if they changed
+      if (canvas.width !== currentWidth || canvas.height !== currentHeight) {
+        canvas.width = currentWidth;
+        canvas.height = currentHeight;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+      }
+
+      // Always use PNG format
+      compressedBlob = await new Promise((resolve) => {
+        canvas.toBlob(
+          (result) => resolve(result),
+          'image/png',
+          quality
+        );
+      });
+
+      // Store attempt info
+      attempts.push({
+        dimensions: `${currentWidth}x${currentHeight}`,
+        quality: Math.round(quality * 100),
+        size: formatFileSize(compressedBlob.size)
+      });
+
+      // Show progress notification
+      showNotification(
+        `Trying ${currentWidth}x${currentHeight} @ ${Math.round(quality * 100)}% quality (${formatFileSize(compressedBlob.size)})`,
+        'info'
+      );
+
+      if (compressedBlob.size <= message.settings.maxFileSize) {
+        showNotification('Found optimal compression settings!', 'success');
+        break;
+      }
+
+      // Adjust settings for next attempt
+      if (quality > 0.2) {
+        // First try reducing quality
+        quality = Math.max(0.1, quality - 0.1);
+      } else if (scaleFactor > 0.3) {
+        // Then try reducing size
+        scaleFactor = Math.max(0.2, scaleFactor - 0.2);
+        quality = Math.min(0.5, quality + 0.1); // Increase quality a bit when reducing size
+      } else {
+        // If we still can't meet the size, use minimum dimensions and quality
+        const finalWidth = minWidth;
+        const finalHeight = Math.round(targetHeight * (finalWidth / targetWidth));
+        compressedBlob = await new Promise((resolve) => {
+          canvas.toBlob(
+            (result) => resolve(result),
+            'image/png',
+            0.1
+          );
+        });
+        attempts.push({
+          dimensions: `${finalWidth}x${finalHeight}`,
+          quality: 10,
+          size: formatFileSize(compressedBlob.size)
+        });
+        break;
+      }
     }
+
+    // Show compression summary
+    console.log('Compression attempts summary:');
+    console.table(attempts);
+
+    // Show a user-friendly notification with the summary
+    const summaryText = attempts.length > 1 ?
+      `Tried ${attempts.length} combinations:\n` +
+      `• Started with: ${attempts[0].dimensions} @ ${attempts[0].quality}% (${attempts[0].size})\n` +
+      `• Ended with: ${attempts[attempts.length-1].dimensions} @ ${attempts[attempts.length-1].quality}% (${attempts[attempts.length-1].size})`
+      : 'Compressed in one attempt';
+
+    showNotification(summaryText, 'info');
 
     // Write to clipboard
-    await writeToClipboard(compressedBlob);
+    try {
+      await writeToClipboard(compressedBlob);
 
-    // Show success notification
-    const ratio = ((blob.size - compressedBlob.size) / blob.size * 100).toFixed(1);
-    showNotification(
-      `Image compressed and copied! (${formatFileSize(blob.size)} → ${formatFileSize(compressedBlob.size)}, ${ratio}% smaller)`,
-      'success'
-    );
+      // Show success notification
+      const ratio = ((blob.size - compressedBlob.size) / blob.size * 100).toFixed(1);
+      showNotification(
+        `Image compressed and copied! (${formatFileSize(blob.size)} → ${formatFileSize(compressedBlob.size)}, ${ratio}% smaller)`,
+        'success'
+      );
 
-    return {
-      success: true,
-      originalSize: blob.size,
-      compressedSize: compressedBlob.size,
-      ratio: ratio
-    };
+      return {
+        success: true,
+        originalSize: blob.size,
+        compressedSize: compressedBlob.size,
+        ratio: ratio
+      };
+    } catch (clipboardError) {
+      console.error('Failed to write to clipboard:', clipboardError);
+      showNotification(
+        `Image compressed but clipboard operation failed: ${clipboardError.message}`,
+        'error'
+      );
+      throw clipboardError;
+    }
 
   } catch (error) {
-    // Improve error logging
     const errorDetails = {
       message: error.message || 'Unknown error',
       name: error.name,
       stack: error.stack,
       toString: error.toString(),
-      url: message.imageUrl // Include the URL that failed
+      url: message.imageUrl
     };
 
-    // Create a more descriptive error message
     let errorMessage = 'Failed to process image: ';
     if (error.message?.includes('Failed to fetch')) {
       errorMessage += 'Could not download the image. Please check your internet connection.';
@@ -478,9 +613,8 @@ document.addEventListener('paste', async (e) => {
 
         // Get current compression settings
         const settings = await chrome.storage.sync.get({
-          format: 'jpeg',
-          quality: 100,
-          maxWidth: 400,
+          quality: 90,
+          maxWidth: 1920,
           minWidth: 400,
           maxFileSize: 1048576 // 1MB in bytes
         });
@@ -521,21 +655,82 @@ document.addEventListener('paste', async (e) => {
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
-        // Compress the image
-        const quality = settings.quality / 100;
-        const compressedBlob = await new Promise((resolve, reject) => {
-          canvas.toBlob(
-            (result) => {
-              if (result) resolve(result);
-              else reject(new Error('Failed to create compressed blob'));
-            },
-            'image/png',
-            quality
-          );
-        });
+        // Try compression with progressively more aggressive settings
+        let compressedBlob = null;
+        let quality = Math.min(0.9, settings.quality / 100);
+        let scaleFactor = 1;
+        let attempts = [];
 
-        // Write to clipboard
-        await writeToClipboard(compressedBlob);
+        while (!compressedBlob || compressedBlob.size > settings.maxFileSize) {
+          const currentWidth = Math.max(Math.round(targetWidth * scaleFactor), minWidth);
+          const currentHeight = Math.round(targetHeight * (currentWidth / targetWidth));
+
+          // Always use PNG format
+          compressedBlob = await new Promise((resolve) => {
+            canvas.toBlob(
+              (result) => resolve(result),
+              'image/png',
+              quality
+            );
+          });
+
+          // Store attempt info
+          attempts.push({
+            dimensions: `${currentWidth}x${currentHeight}`,
+            quality: Math.round(quality * 100),
+            size: formatFileSize(compressedBlob.size)
+          });
+
+          if (compressedBlob.size <= settings.maxFileSize) {
+            break;
+          }
+
+          // Adjust settings for next attempt
+          if (quality > 0.2) {
+            // First try reducing quality
+            quality = Math.max(0.1, quality - 0.1);
+          } else if (scaleFactor > 0.3) {
+            // Then try reducing size
+            scaleFactor = Math.max(0.2, scaleFactor - 0.2);
+            quality = Math.min(0.5, quality + 0.1); // Increase quality a bit when reducing size
+          } else {
+            // If we still can't meet the size, use minimum dimensions and quality
+            const finalWidth = minWidth;
+            const finalHeight = Math.round(targetHeight * (finalWidth / targetWidth));
+            compressedBlob = await new Promise((resolve) => {
+              canvas.toBlob(
+                (result) => resolve(result),
+                'image/png',
+                0.1
+              );
+            });
+            attempts.push({
+              dimensions: `${finalWidth}x${finalHeight}`,
+              quality: 10,
+              size: formatFileSize(compressedBlob.size)
+            });
+            break;
+          }
+        }
+
+        // Show compression summary
+        console.log('Compression attempts summary:');
+        console.table(attempts);
+
+        // Show a user-friendly notification with the summary
+        const summaryText = attempts.length > 1 ?
+          `Tried ${attempts.length} combinations:\n` +
+          `• Started with: ${attempts[0].dimensions} @ ${attempts[0].quality}% (${attempts[0].size})\n` +
+          `• Ended with: ${attempts[attempts.length-1].dimensions} @ ${attempts[attempts.length-1].quality}% (${attempts[attempts.length-1].size})`
+          : 'Compressed in one attempt';
+
+        showNotification(summaryText, 'info');
+
+        // Write PNG to clipboard
+        const clipboardItem = new ClipboardItem({
+          'image/png': compressedBlob
+        });
+        await navigator.clipboard.write([clipboardItem]);
 
         // Show success notification
         const ratio = ((blob.size - compressedBlob.size) / blob.size * 100).toFixed(1);

@@ -15,6 +15,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.sublime-*
+*.code-workspace
 
 # Logs
 npm-debug.log*
