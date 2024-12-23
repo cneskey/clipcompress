@@ -5,13 +5,11 @@ A Chrome extension that compresses images in your clipboard with customizable se
 ## Features
 
 - Compress images directly from web pages to your clipboard
-- Support for multiple image formats (JPEG, PNG)
-- Customizable compression settings
-- Save and load compression presets
-- Right-click menu integration
-- Keyboard shortcut support (Ctrl+Shift+C / Cmd+Shift+C)
-- Drag and drop support
-- Paste event handling
+- Outputs compressed images in PNG format
+- Smart compression algorithm that balances quality and file size
+- Right-click menu integration for web images
+- Drag and drop support for local images
+- Progress notifications with compression details
 
 ## Installation
 
@@ -28,38 +26,29 @@ A Chrome extension that compresses images in your clipboard with customizable se
 2. Select "Compress Image to Clipboard"
 3. The compressed image will be copied to your clipboard
 
+### Drag and Drop
+
+1. Drag any image file from your computer
+2. Drop it onto any webpage
+3. The compressed image will be copied to your clipboard
+
 ### Settings
 
-- **Format**: Choose between JPEG and PNG
-- **Quality**: Set compression quality (1-100)
-- **Max Width**: Set maximum image width (maintains aspect ratio)
-- **Max File Size**: Set maximum file size for compressed images (in MB)
+- **Quality**: Set compression quality (1-100%)
+- **Maximum Width**: Set maximum image width (100-8000px, maintains aspect ratio)
+- **Maximum File Size**: Set target maximum file size (0.1-50 MB)
 
-### Presets
+The extension uses a smart compression algorithm that:
 
-1. Configure your desired settings
-2. Click "Save Current as Preset"
-3. Enter a name for the preset
-4. Load presets from the dropdown menu
-5. Delete unwanted presets with the "Delete Selected Preset" button
+- Maintains aspect ratio while resizing
+- Progressively adjusts quality and dimensions to meet size targets
+- Shows detailed progress notifications
+- Provides compression statistics after completion
 
-## Development
+### Keyboard Shortcuts
 
-The extension consists of the following components:
-
-- `manifest.json`: Extension configuration
-- `popup.html/js`: Settings UI and preset management
-- `background.js`: Core compression functionality
-- `contentScript.js`: Page interaction handling
+- Use `Ctrl+Shift+C` (Windows) or `Cmd+Shift+C` (Mac) to open the settings popup
 
 ## License
 
 MIT License - feel free to use and modify as needed.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
