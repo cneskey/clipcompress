@@ -15,7 +15,6 @@ build/
 *.swo
 .DS_Store
 .env
-
 # Logs
 logs
 *.log
