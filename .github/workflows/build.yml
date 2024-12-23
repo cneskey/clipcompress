@@ -1,0 +1,42 @@
+name: Build and Test Chrome Extension
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Build extension
+        run: npm run build --if-present
+
+      - name: Run tests
+        run: npm test --if-present
+
+      - name: Package extension
+        run: |
+          zip -r extension.zip dist/* manifest.json icons/*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: chrome-extension
+          path: extension.zip
