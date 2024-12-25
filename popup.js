@@ -724,6 +724,9 @@ async function processImage(blob, settings) {
   const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
+  // Try compression with a safety margin
+  const targetSize = settings.maxFileSize * 0.98; // Add 2% safety margin
+
   // Try compression
   while (attempts < maxAttempts) {
     ctx.clearRect(0, 0, width, height);
@@ -733,7 +736,7 @@ async function processImage(blob, settings) {
       type: 'image/png'
     });
 
-    if (compressedBlob.size <= settings.maxFileSize) {
+    if (compressedBlob.size <= targetSize) {
       return {
         blob: compressedBlob,
         originalSize: blob.size,
@@ -744,8 +747,8 @@ async function processImage(blob, settings) {
     }
 
     // Calculate how much we need to reduce dimensions
-    const sizeRatio = settings.maxFileSize / compressedBlob.size;
-    const reductionFactor = Math.sqrt(sizeRatio) * 0.95; // 0.95 for safety margin
+    const sizeRatio = targetSize / compressedBlob.size;
+    const reductionFactor = Math.sqrt(sizeRatio) * 0.9; // More aggressive reduction
 
     // Reduce dimensions
     width = Math.max(Math.floor(width * reductionFactor), 100);
@@ -759,13 +762,27 @@ async function processImage(blob, settings) {
   }
 
   // Final attempt with minimum dimensions
-  canvas.width = Math.min(width, 800);
-  canvas.height = Math.min(height, Math.floor((800 / width) * height));
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  width = Math.min(width, 800);
+  height = Math.min(height, Math.floor((800 / width) * height));
+  canvas.width = width;
+  canvas.height = height;
+  ctx.drawImage(img, 0, 0, width, height);
 
-  const finalBlob = await canvas.convertToBlob({
+  let finalBlob = await canvas.convertToBlob({
     type: 'image/png'
   });
+
+  // If still too big, make one final reduction attempt
+  if (finalBlob.size > targetSize) {
+    width = Math.floor(width * 0.9);
+    height = Math.floor(height * 0.9);
+    canvas.width = width;
+    canvas.height = height;
+    ctx.drawImage(img, 0, 0, width, height);
+    finalBlob = await canvas.convertToBlob({
+      type: 'image/png'
+    });
+  }
 
   // If even this is too big, throw an error
   if (finalBlob.size > settings.maxFileSize) {
