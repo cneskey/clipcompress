@@ -8,7 +8,6 @@ A Chrome extension that compresses clipboard images with a single click. Perfect
 - **Interactive Zoom**: Compare image quality with synchronized 8x zoom magnifying glasses
 - **Smart Compression**: Automatically adjusts dimensions and quality to meet size constraints
 - **Flexible Controls**:
-  - Quality slider (1-100%)
   - Maximum width limit (100-8000px)
   - Maximum file size (0.1-10MB)
   - Quick file size presets (1MB, 2MB, 5MB, 10MB)
@@ -32,7 +31,6 @@ A Chrome extension that compresses clipboard images with a single click. Perfect
 
 ## Settings
 
-- **Quality**: Controls the compression quality (default: 85%)
 - **Max Width**: Limits the maximum width of the output image (default: 4000px)
 - **Max Size**: Sets the target maximum file size (default: 1.0MB)
 
