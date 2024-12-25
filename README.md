@@ -1,43 +1,49 @@
 # ClipCompress
 
-A Chrome extension that compresses images in your clipboard with customizable settings.
+A Chrome extension that compresses clipboard images with a single click. Perfect for quickly reducing image sizes while maintaining quality.
 
 ## Features
 
-- Compress images directly from web pages to your clipboard
-- Outputs compressed images in PNG format
-- Smart compression algorithm that balances quality and file size
-- Right-click menu integration for web images
-- Progress notifications with compression details
-
-## Installation
-
-1. Clone this repository or download the source code
-2. Open Chrome and navigate to `chrome://extensions`
-3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" and select the extension directory
+- **Live Preview**: See both original and compressed images side by side
+- **Interactive Zoom**: Compare image quality with synchronized 8x zoom magnifying glasses
+- **Smart Compression**: Automatically adjusts dimensions and quality to meet size constraints
+- **Flexible Controls**:
+  - Quality slider (1-100%)
+  - Maximum width limit (100-8000px)
+  - Maximum file size (0.1-10MB)
+  - Quick file size presets (1MB, 2MB, 5MB, 10MB)
+- **Dark/Light Mode**: Automatically matches your system theme
+- **Detailed Information**: Shows dimensions and file sizes for both original and compressed images
 
 ## Usage
 
-### Right-Click Menu
+1. Copy an image to your clipboard (Cmd/Ctrl+C)
+2. Click the ClipCompress extension icon
+3. Adjust compression settings if desired
+4. Click "Compress Clipboard Image"
+5. The compressed image is automatically copied to your clipboard
+6. Use the magnifying glasses to inspect image quality (drag to move)
 
-1. Right-click on any image on a webpage
-2. Select "Compress Image to Clipboard"
-3. The compressed image will be copied to your clipboard
+## Installation
 
-### Settings
+1. Download the extension from the Chrome Web Store (link coming soon)
+2. Click "Add to Chrome"
+3. Grant clipboard permissions when prompted
 
-- **Quality**: Set compression quality (1-100%)
-- **Maximum Width**: Set maximum image width (100-8000px, maintains aspect ratio)
-- **Maximum File Size**: Set target maximum file size (0.1-50 MB)
+## Settings
 
-The extension uses a smart compression algorithm that:
+- **Quality**: Controls the compression quality (default: 85%)
+- **Max Width**: Limits the maximum width of the output image (default: 4000px)
+- **Max Size**: Sets the target maximum file size (default: 1.0MB)
 
-- Maintains aspect ratio while resizing
-- Progressively adjusts quality and dimensions to meet size targets
-- Shows detailed progress notifications
-- Provides compression statistics after completion
+## Technical Details
 
-## License
+- Supports PNG, JPEG, and WebP input formats
+- Outputs optimized PNG format
+- Uses browser-native compression algorithms
+- No external server dependencies - all processing happens locally
+- Preserves aspect ratio during resizing
 
-MIT License - feel free to use and modify as needed.
+## Privacy
+
+ClipCompress processes all images locally in your browser. No data is ever sent to external servers.

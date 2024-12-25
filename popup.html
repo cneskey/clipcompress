@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>ClipCompress</title>
+  <meta charset="UTF-8">
   <style>
     :root {
       --bg-color: #1e1e1e;
@@ -10,20 +10,27 @@
       --border-color: #3d3d3d;
       --hover-color: #3d3d3d;
       --slider-color: #4a9eff;
+      --shadow-color: rgba(0, 0, 0, 0.2);
+      --success-color: #4caf50;
+      --error-color: #f44336;
     }
 
     body {
-      width: 300px;
+      width: 452px;
+      height: 648px;
       padding: 16px;
       margin: 0;
       background-color: var(--bg-color);
       color: var(--text-color);
       font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
     h1 {
-      font-size: 24px;
-      margin: 0 0 24px 0;
+      font-size: 20px;
+      margin: 0;
       padding-bottom: 8px;
       border-bottom: 1px solid var(--border-color);
       display: flex;
@@ -32,84 +39,399 @@
     }
 
     .version {
-      font-size: 14px;
+      font-size: 12px;
       opacity: 0.7;
+      font-weight: normal;
+      background: var(--input-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
     }
 
-    label {
+    .preview-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .preview-container {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--input-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    .zoom-views-container {
+      height: 100px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: var(--bg-color);
+      margin-bottom: 4px;
+    }
+
+    .preview-half {
+      position: relative;
+      background: var(--input-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .preview-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+
+    .preview-image-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+
+    .preview-image {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: none;
+      transition: all 0.3s ease;
+    }
+
+    .zoom-view {
+      position: relative;
+      width: 100%;
+      height: 100px;
+      overflow: hidden;
+      background: var(--input-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    .zoom-lens {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border: 2px solid var(--slider-color);
+      border-radius: 4px;
+      cursor: grab;
+      z-index: 3;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
+      display: none;
+      transition: width 0.15s ease-out, height 0.15s ease-out;
+    }
+
+    .zoom-lens:active {
+      cursor: grabbing;
+    }
+
+    .zoom-image {
+      position: absolute;
+      transform-origin: 0 0;
+      pointer-events: none;
       display: block;
-      margin-bottom: 8px;
-      font-weight: 500;
+      transition: transform 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out;
+    }
+
+    .zoom-info {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      z-index: 2;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 4px var(--shadow-color);
+    }
+
+    .preview-half::after {
+      content: 'Original';
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 11px;
+      padding: 4px 8px;
+      background: rgba(0, 0, 0, 0.75);
+      border-radius: 6px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 4px var(--shadow-color);
+      z-index: 5;
+    }
+
+    .preview-half.compressed::after {
+      content: 'Compressed';
+    }
+
+    .preview-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 13px;
+      text-align: center;
+      padding: 16px;
+      z-index: 3;
+    }
+
+    .image-info {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 6px 8px;
+      font-size: 11px;
+      display: none;
+      backdrop-filter: blur(4px);
+      z-index: 2;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 0;
     }
 
     .range-container {
-      margin-bottom: 16px;
+      display: grid;
+      grid-template-columns: auto 60px;
+      align-items: center;
+      gap: 6px;
+      background: var(--input-bg);
+      padding: 4px 8px;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px var(--shadow-color);
+      position: relative;
+    }
+
+    .effective-limit-marker {
+      position: absolute;
+      width: 2px;
+      height: 8px;
+      background: var(--error-color);
+      bottom: 7px;
+      opacity: 0.8;
+      pointer-events: none;
+      z-index: 2;
+      display: none;
+    }
+
+    .effective-limit-marker::after {
+      content: 'Effective Limit';
+      position: absolute;
+      font-size: 10px;
+      color: var(--error-color);
+      white-space: nowrap;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0.8;
     }
 
     .range-container label {
+      font-size: 11px;
+      font-weight: 500;
       display: flex;
-      justify-content: space-between;
+      gap: 6px;
       align-items: center;
     }
 
     .range-value {
-      font-variant-numeric: tabular-nums;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .range-value input {
+      width: 100%;
+      padding: 2px 16px 2px 4px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-color);
+      color: var(--text-color);
+      font-size: 11px;
+      font-family: inherit;
+      text-align: right;
+      transition: all 0.2s ease;
+    }
+
+    .range-value input:focus {
+      outline: none;
+      border-color: var(--slider-color);
+      box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+    }
+
+    .range-value::after {
+      content: attr(data-unit);
+      position: absolute;
+      right: 4px;
+      font-size: 11px;
+      opacity: 0.7;
+      pointer-events: none;
     }
 
     input[type="range"] {
       width: 100%;
-      margin: 8px 0;
+      height: 2px;
+      margin: 4px 0;
       -webkit-appearance: none;
-      background: transparent;
-    }
-
-    input[type="range"]::-webkit-slider-runnable-track {
-      width: 100%;
-      height: 4px;
-      background: var(--input-bg);
-      border-radius: 2px;
+      background: var(--border-color);
+      border-radius: 1px;
+      grid-column: 1 / -1;
+      position: relative;
     }
 
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
-      height: 16px;
-      width: 16px;
+      height: 12px;
+      width: 12px;
       border-radius: 50%;
       background: var(--slider-color);
-      margin-top: -6px;
       cursor: pointer;
+      box-shadow: 0 1px 3px var(--shadow-color);
+      transition: all 0.2s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
     }
 
     .file-size-shortcuts {
       display: flex;
-      gap: 8px;
-      margin-top: -8px;
-      margin-bottom: 16px;
+      gap: 4px;
+      margin: 2px 0;
     }
 
     .file-size-shortcuts button {
       flex: 1;
-      padding: 8px;
+      padding: 4px;
       border: none;
       border-radius: 4px;
       background: var(--input-bg);
       color: var(--text-color);
       cursor: pointer;
-      font-size: 12px;
-      transition: background-color 0.2s;
+      font-size: 11px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 3px var(--shadow-color);
     }
 
     .file-size-shortcuts button:hover {
       background: var(--hover-color);
+      transform: translateY(-1px);
+    }
+
+    button#copyBtn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: var(--slider-color);
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(74, 158, 255, 0.3);
+    }
+
+    button#copyBtn:hover {
+      background: #2979ff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(74, 158, 255, 0.4);
+    }
+
+    button#copyBtn:disabled {
+      background: var(--input-bg);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .status {
+      font-size: 13px;
+      line-height: 1.4;
+      padding: 8px 12px;
+      border-radius: 8px;
+      display: none;
+      animation: fadeIn 0.2s ease;
+      margin-top: -2px;
+    }
+
+    .status.success {
+      background: rgba(76, 175, 80, 0.1);
+      color: #81c784;
+      border: 1px solid rgba(76, 175, 80, 0.2);
+    }
+
+    .status.error {
+      background: rgba(244, 67, 54, 0.1);
+      color: #e57373;
+      border: 1px solid rgba(244, 67, 54, 0.2);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     @media (prefers-color-scheme: light) {
       :root {
         --bg-color: #ffffff;
         --text-color: #000000;
-        --input-bg: #f0f0f0;
+        --input-bg: #f5f5f5;
         --border-color: #e0e0e0;
-        --hover-color: #e5e5e5;
+        --hover-color: #eeeeee;
+        --shadow-color: rgba(0, 0, 0, 0.1);
+      }
+
+      .preview-placeholder {
+        color: rgba(0, 0, 0, 0.4);
+      }
+
+      .status.success {
+        background: rgba(76, 175, 80, 0.05);
+        color: #2e7d32;
+        border-color: rgba(76, 175, 80, 0.1);
+      }
+
+      .status.error {
+        background: rgba(244, 67, 54, 0.05);
+        color: #c62828;
+        border-color: rgba(244, 67, 54, 0.1);
+      }
+
+      .preview-half::after {
+        background: rgba(255, 255, 255, 0.9);
+        color: #000;
       }
     }
   </style>
@@ -120,35 +442,68 @@
     <span class="version">v1.0.0</span>
   </h1>
 
-  <div class="range-container">
-    <label for="quality">
-      Quality
-      <span class="range-value">100%</span>
-    </label>
-    <input type="range" id="quality" min="1" max="100" value="100">
+  <div class="preview-section">
+    <div class="preview-container">
+      <div class="preview-placeholder">Copy an image to preview</div>
+      <div class="preview-half original">
+        <div class="preview-wrapper">
+          <div class="preview-image-container">
+            <img class="preview-image original" alt="Original">
+            <div class="image-info original"></div>
+          </div>
+          <div class="zoom-lens"></div>
+        </div>
+      </div>
+      <div class="preview-half compressed">
+        <div class="preview-wrapper">
+          <div class="preview-image-container">
+            <img class="preview-image compressed" alt="Compressed">
+            <div class="image-info compressed"></div>
+          </div>
+          <div class="zoom-lens"></div>
+        </div>
+      </div>
+    </div>
+    <div class="zoom-views-container">
+      <div class="zoom-view">
+        <div class="zoom-info">8x zoom</div>
+        <img class="zoom-image original" alt="Original zoom">
+      </div>
+      <div class="zoom-view">
+        <div class="zoom-info">8x zoom</div>
+        <img class="zoom-image compressed" alt="Compressed zoom">
+      </div>
+    </div>
   </div>
 
-  <div class="range-container">
-    <label for="maxWidth">
-      Maximum Width
-      <span class="range-value">4000px</span>
-    </label>
-    <input type="range" id="maxWidth" min="100" max="8000" value="4000">
-  </div>
+  <div class="controls">
+    <div class="range-container">
+      <label>Max Width</label>
+      <div class="range-value" data-unit="px">
+        <input type="number" id="maxWidth-number" min="100" max="8000" value="4000">
+      </div>
+      <input type="range" id="maxWidth" min="100" max="8000" value="4000">
+      <div class="effective-limit-marker" id="maxWidth-limit"></div>
+    </div>
 
-  <div class="range-container">
-    <label for="maxFileSize">
-      Maximum File Size
-      <span class="range-value">1.0 MB</span>
-    </label>
-    <input type="range" id="maxFileSize" min="0.1" max="50" step="0.1" value="1.0">
-  </div>
+    <div class="range-container">
+      <label>Max Size</label>
+      <div class="range-value" data-unit="MB">
+        <input type="number" id="maxFileSize-number" min="0.1" max="10" step="0.1" value="1.0">
+      </div>
+      <input type="range" id="maxFileSize" min="0.1" max="10" step="0.1" value="1.0">
+      <div class="effective-limit-marker" id="maxFileSize-limit"></div>
+    </div>
 
-  <div class="file-size-shortcuts">
-    <button data-size="1">1 MB</button>
-    <button data-size="5">5 MB</button>
-    <button data-size="10">10 MB</button>
-    <button data-size="20">20 MB</button>
+    <div class="file-size-shortcuts">
+      <button data-size="1">1 MB</button>
+      <button data-size="2">2 MB</button>
+      <button data-size="5">5 MB</button>
+      <button data-size="10">10 MB</button>
+    </div>
+
+    <button id="copyBtn">Copy Compressed to Clipboard</button>
+    <div id="status" class="status"></div>
   </div>
 
   <script src="popup.js"></script>
