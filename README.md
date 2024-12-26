@@ -1,11 +1,10 @@
 # ClipCompress
 
-TODO: ![Chrome Web Store](https://img.shields.io/chrome-web-store/v/cnhnpadgblbfdilejkcjenmklcellfdo.svg?style=flat-square&logo=google-chrome)
-TODO: ![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/cnhnpadgblbfdilejkcjenmklcellfdo.svg?style=flat-square)
+![Chrome Web Store](https://img.shields.io/chrome-web-store/v/igoajflfbpjjehnlobgclemmdpfjbhgb.svg?style=flat-square&logo=google-chrome)![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/igoajflfbpjjehnlobgclemmdpfjbhgb.svg?style=flat-square)
 
 Welcome to the official repository for the **ClipCompress** Chrome Extension.
 
-TODO [View in Chrome Web Store](https://chromewebstore.google.com/detail/clipcompress/cnhnpadgblbfdilejkcjenmklcellfdo)
+[View in Chrome Web Store](https://chromewebstore.google.com/detail/clipcompress/igoajflfbpjjehnlobgclemmdpfjbhgb)
 
 A Chrome extension that compresses clipboard images with live preview. Perfect for quickly reducing image sizes while maintaining quality.
 
