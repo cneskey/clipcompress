@@ -1,6 +1,7 @@
 # ClipCompress
 
-![Chrome Web Store](https://img.shields.io/chrome-web-store/v/igoajflfbpjjehnlobgclemmdpfjbhgb.svg?style=flat-square&logo=google-chrome)![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/igoajflfbpjjehnlobgclemmdpfjbhgb.svg?style=flat-square)
+![Chrome Web Store](https://img.shields.io/chrome-web-store/v/igoajflfbpjjehnlobgclemmdpfjbhgb.svg?style=flat-square&logo=google-chrome)
+![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/igoajflfbpjjehnlobgclemmdpfjbhgb.svg?style=flat-square)
 
 Welcome to the official repository for the **ClipCompress** Chrome Extension.
 
