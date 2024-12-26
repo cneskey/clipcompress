@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClipCompress",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Compress clipboard images with live preview",
   "permissions": [
     "storage",
